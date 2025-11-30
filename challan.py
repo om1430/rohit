@@ -271,251 +271,212 @@ def draw_summary_pdf(pdf_buffer, route_from, route_to, month_year, summary_rows)
 # --- Weekly Bill & Ledger PDF Generation ---
 
 def draw_bill_pdf(pdf_buffer, consignor, route, week_range, shipments, summary):
-    """
-    BILL PDF (same logic as your earlier weekly ledger PDF)
-    Includes: SUBTOTAL + OLD BALANCE + FINAL TOTAL
-    """
+
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
     from reportlab.platypus import Table, TableStyle
     from reportlab.lib import colors
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-    
-    # Register DejaVu Sans font which supports rupee symbol (kept from your original)
-    try:
-        pdfmetrics.registerFont(TTFont('DejaVuSans', 'DejaVuSans.ttf'))
-        pdfmetrics.registerFont(TTFont('DejaVuSans-Bold', 'DejaVuSans-Bold.ttf'))
-        use_unicode = True
-    except:
-        use_unicode = False
-    
+
     c = canvas.Canvas(pdf_buffer, pagesize=A4)
     pw, ph = A4
     margin = 15 * mm
 
-    # Header (kept same style as earlier)
-    c.setFont("Helvetica-Bold", 12)
-    week_text = f"Week: {week_range}"
-    c.drawString(margin, ph - 40, week_text)
-    
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(margin, ph - 58, f"Consignor: {consignor}")
-    c.drawString(margin, ph - 73, f"Route: {route}")
+    # ============================================================
+    #            SINGLE CENTER HEADING  (Your Required Style)
+    # ============================================================
 
-    # Shipments table
-    table_start_y = ph - 100
-    table_data = [["CONSIGNEE", "DATE", "WT (KG)", "FREIGHT (Rs/KG)", "PKGS", "AMOUNT (Rs)"]]
-    
-    # Calculate total amount & weight
-    total_amount = sum(ship["amount"] for ship in shipments)
-    total_weight = sum(ship["wt"] for ship in shipments)
-    
-    for ship in shipments:
-        freight_per_kg = ship["amount"] / ship["wt"] if ship["wt"] > 0 else 0
-        
+    heading_y = ph - 60
+
+    # (ABC TRANSPORT)
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(pw/2, heading_y, f"({consignor})")
+
+    # DELHI TO MUMBAI
+    c.setFont("Helvetica-Bold", 16)
+    route_heading = route.replace(" → ", " TO ")
+    c.drawCentredString(pw/2, heading_y - 22, route_heading.upper())
+
+    # DATE : 20 NOV - 26 NOV 2025
+    c.setFont("Helvetica-Bold", 12)
+    c.drawCentredString(pw/2, heading_y - 42, f"DATE : {week_range}")
+
+    # ============================================================
+    #                         TABLE
+    # ============================================================
+
+    table_start_y = ph - 120
+
+    # REMOVED CONSIGNEE COLUMN
+    table_data = [
+        ["SR NO", "DATE", "WT (KG)", "FREIGHT (₹/KG)", "PKGS", "AMOUNT (₹)"]
+    ]
+
+    total_amount = 0
+    total_wt = 0
+
+    # Add shipment rows
+    for i, ship in enumerate(shipments, start=1):
+        freight_per_kg = ship["amount"] / ship["wt"] if ship["wt"] else 0
+
         table_data.append([
-            ship["consignee"][:22],
+            str(i),
             ship["date"],
             str(int(ship["wt"])),
             f"{freight_per_kg:.2f}",
             str(int(ship["pkgs"])),
-            f"Rs {round(ship['amount'], 2)}"
+            f"{round(ship['amount'], 2)}"
         ])
-    
-    # SUBTOTAL row
+
+        total_amount += ship["amount"]
+        total_wt += ship["wt"]
+
+    # SUBTOTAL
     table_data.append([
-        "SUBTOTAL",
-        "",
-        str(int(total_weight)),
-        "",
-        "",
-        f"Rs {round(total_amount, 2)}"
+        "", "SUBTOTAL", str(int(total_wt)), "", "", f"{round(total_amount, 2)}"
     ])
-    
-    # Blank row
-    table_data.append(["", "", "", "", "", ""])
-    
-    # OLD BALANCE row
+
+    # OLD BALANCE
     table_data.append([
-        "OLD BALANCE",
-        "",
-        "",
-        "",
-        "",
-        f"Rs {round(summary.get('previous_balance', 0), 2)}"
+        "", "OLD BALANCE", "", "", "", f"{round(summary.get('previous_balance', 0), 2)}"
     ])
-    
-    # FINAL TOTAL row
-    final_total = total_amount + summary.get('previous_balance', 0)
+
+    # FINAL TOTAL
+    final_total = total_amount + summary.get("previous_balance", 0)
     table_data.append([
-        "FINAL TOTAL",
-        "",
-        str(int(total_weight)),
-        "",
-        "",
-        f"Rs {round(final_total, 2)}"
+        "", "FINAL TOTAL", str(int(total_wt)), "", "", f"{round(final_total, 2)}"
     ])
-    
-    col_widths = [160, 60, 65, 95, 50, 90]
+
+    # Updated column widths (since consignee removed)
+    col_widths = [60, 90, 80, 100, 60, 90]
+
     table = Table(table_data, colWidths=col_widths)
-    
-    last_row = len(table_data) - 1
-    old_balance_row = last_row - 1
-    blank_row = last_row - 2
-    subtotal_row = blank_row - 1
-    
+
+    # ----------------- TABLE STYLE -----------------
     table.setStyle(TableStyle([
-        # Header styling
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        
-        # Data rows (shipments)
-        ('BACKGROUND', (0, 1), (-1, subtotal_row - 1), colors.HexColor('#FFF2CC')),
-        ('FONTNAME', (0, 1), (-1, subtotal_row - 1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, subtotal_row - 1), 8.5),
-        
-        # Subtotal row
-        ('BACKGROUND', (0, subtotal_row), (-1, subtotal_row), colors.HexColor('#D9E2F3')),
-        ('FONTNAME', (0, subtotal_row), (-1, subtotal_row), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, subtotal_row), (-1, subtotal_row), 9),
-        
-        # Blank row
-        ('BACKGROUND', (0, blank_row), (-1, blank_row), colors.white),
-        ('GRID', (0, blank_row), (-1, blank_row), 0, colors.white),
-        
-        # Old Balance row
-        ('BACKGROUND', (0, old_balance_row), (-1, old_balance_row), colors.HexColor('#E7E6E6')),
-        ('FONTNAME', (0, old_balance_row), (-1, old_balance_row), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, old_balance_row), (-1, old_balance_row), 9),
-        
-        # Final Total row
-        ('BACKGROUND', (0, last_row), (-1, last_row), colors.HexColor('#4472C4')),
-        ('TEXTCOLOR', (0, last_row), (-1, last_row), colors.white),
-        ('FONTNAME', (0, last_row), (-1, last_row), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, last_row), (-1, last_row), 10),
-        
-        # Center alignment
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        # Left align label column
-        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
-        # Right align numeric columns
-        ('ALIGN', (2, 1), (2, last_row), 'RIGHT'),
-        ('ALIGN', (3, 1), (3, last_row), 'RIGHT'),
-        ('ALIGN', (5, 1), (5, last_row), 'RIGHT'),
-        
-        # Grid and borders
-        ('GRID', (0, 0), (-1, -1), 0.8, colors.black),
-        ('LINEABOVE', (0, 0), (-1, 0), 1.5, colors.black),
-        ('LINEBELOW', (0, -1), (-1, -1), 1.5, colors.black),
-        ('LINEABOVE', (0, subtotal_row), (-1, subtotal_row), 1.2, colors.black),
-        ('LINEABOVE', (0, last_row), (-1, last_row), 1.5, colors.black),
+        # Header
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#003366')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,0), 10),
+        ('ALIGN', (0,0), (-1,0), 'CENTER'),
+
+        # Body
+        ('BACKGROUND', (0,1), (-1,-4), colors.HexColor('#F7FBFF')),
+        ('FONTNAME', (0,1), (-1,-4), 'Helvetica'),
+        ('FONTSIZE', (0,1), (-1,-4), 9),
+
+        # Subtotal
+        ('BACKGROUND', (0,-3), (-1,-3), colors.HexColor('#DDEBF7')),
+        ('FONTNAME', (0,-3), (-1,-3), 'Helvetica-Bold'),
+
+        # Old Balance
+        ('BACKGROUND', (0,-2), (-1,-2), colors.HexColor('#E7E6E6')),
+        ('FONTNAME', (0,-2), (-1,-2), 'Helvetica-Bold'),
+
+        # Final Total
+        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#003366')),
+        ('TEXTCOLOR', (0,-1), (-1,-1), colors.white),
+        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,-1), (-1,-1), 11),
+
+        # Alignment
+        ('ALIGN', (0,1), (0,-1), 'CENTER'),
+        ('ALIGN', (2,1), (2,-1), 'RIGHT'),
+        ('ALIGN', (3,1), (3,-1), 'RIGHT'),
+        ('ALIGN', (5,1), (5,-1), 'RIGHT'),
+
+        # Borders
+        ('GRID', (0,0), (-1,-1), 0.8, colors.black),
     ]))
-    
+
+    # Draw table
     w, h = table.wrap(0, 0)
     table.drawOn(c, margin, table_start_y - h)
 
     c.showPage()
     c.save()
+
+
 
 def draw_ledger_pdf(pdf_buffer, consignor, route, week_range, shipments, summary):
-    """
-    LEDGER PDF
-    NO old balance, NO final total.
-    Only shipment rows + SUBTOTAL.
-    """
+
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
     from reportlab.platypus import Table, TableStyle
     from reportlab.lib import colors
-    
+
     c = canvas.Canvas(pdf_buffer, pagesize=A4)
     pw, ph = A4
     margin = 15 * mm
 
-    c.setFont("Helvetica-Bold", 12)
-    week_text = f"Week: {week_range} (LEDGER)"
-    c.drawString(margin, ph - 40, week_text)
-    
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(margin, ph - 58, f"Consignor: {consignor}")
-    c.drawString(margin, ph - 73, f"Route: {route}")
+    # HEADER
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(pw/2, ph - 40, "WEEKLY LEDGER")
 
-    table_start_y = ph - 100
-    table_data = [["CONSIGNEE", "DATE", "WT (KG)", "FREIGHT (Rs/KG)", "PKGS", "AMOUNT (Rs)"]]
-    
-    total_amount = sum(ship["amount"] for ship in shipments)
-    total_weight = sum(ship["wt"] for ship in shipments)
-    
-    for ship in shipments:
-        freight_per_kg = ship["amount"] / ship["wt"] if ship["wt"] > 0 else 0
-        
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margin, ph - 70, f"Consignor :  {consignor}")
+    c.drawString(margin, ph - 90, f"Route     :  {route}")
+    c.drawString(margin, ph - 110, f"Week      :  {week_range}")
+
+    # ----------------- TABLE -----------------
+    table_start_y = ph - 150
+    table_data = [["SR\nNO", "CONSIGNEE", "DATE", "WT (KG)", "FREIGHT\n(Rs/KG)", "PKGS", "AMOUNT (Rs)"]]
+
+    total_amount = 0
+    total_wt = 0
+
+    for i, ship in enumerate(shipments, start=1):
+        freight_per_kg = ship["amount"] / ship["wt"] if ship["wt"] else 0
+
         table_data.append([
+            str(i),
             ship["consignee"][:22],
             ship["date"],
             str(int(ship["wt"])),
             f"{freight_per_kg:.2f}",
             str(int(ship["pkgs"])),
-            f"Rs {round(ship['amount'], 2)}"
+            f"{round(ship['amount'], 2)}"
         ])
-    
-    # Only SUBTOTAL row
+
+        total_amount += ship["amount"]
+        total_wt += ship["wt"]
+
+    # SUBTOTAL ONLY
     table_data.append([
-        "SUBTOTAL",
-        "",
-        str(int(total_weight)),
-        "",
-        "",
-        f"Rs {round(total_amount, 2)}"
+        "", "SUBTOTAL", "", str(int(total_wt)), "", "",
+        f"{round(total_amount, 2)}"
     ])
-    
-    col_widths = [160, 60, 65, 95, 50, 90]
+
+    col_widths = [35, 140, 60, 60, 80, 50, 80]
+
     table = Table(table_data, colWidths=col_widths)
-    
-    last_row = len(table_data) - 1
-    subtotal_row = last_row
-    
+
     table.setStyle(TableStyle([
-        # Header styling
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 9),
-        
-        # Data rows (shipments)
-        ('BACKGROUND', (0, 1), (-1, subtotal_row - 1), colors.HexColor('#FFF2CC')),
-        ('FONTNAME', (0, 1), (-1, subtotal_row - 1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, subtotal_row - 1), 8.5),
-        
-        # Subtotal row
-        ('BACKGROUND', (0, subtotal_row), (-1, subtotal_row), colors.HexColor('#FFD966')),
-        ('FONTNAME', (0, subtotal_row), (-1, subtotal_row), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, subtotal_row), (-1, subtotal_row), 9),
-        
-        # Alignments
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
-        ('ALIGN', (2, 1), (2, last_row), 'RIGHT'),
-        ('ALIGN', (3, 1), (3, last_row), 'RIGHT'),
-        ('ALIGN', (5, 1), (5, last_row), 'RIGHT'),
-        
-        # Grid
-        ('GRID', (0, 0), (-1, -1), 0.8, colors.black),
-        ('LINEABOVE', (0, 0), (-1, 0), 1.5, colors.black),
-        ('LINEABOVE', (0, subtotal_row), (-1, subtotal_row), 1.2, colors.black),
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#4472C4')),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+
+        ('BACKGROUND', (0,1), (-1,-2), colors.HexColor('#FFF2CC')),
+
+        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#FFD966')),
+        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+
+        ('ALIGN', (0,1), (0,-1), 'CENTER'),
+        ('ALIGN', (3,1), (3,-1), 'RIGHT'),
+        ('ALIGN', (4,1), (4,-1), 'RIGHT'),
+        ('ALIGN', (6,1), (6,-1), 'RIGHT'),
+
+        ('GRID', (0,0), (-1,-1), 0.8, colors.black),
     ]))
-    
+
     w, h = table.wrap(0, 0)
     table.drawOn(c, margin, table_start_y - h)
 
     c.showPage()
     c.save()
+
 
 # --- Main Processing Function (Challans etc.) ---
 def process_excel_file(uploaded_file, route_hamali):    
