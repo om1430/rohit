@@ -277,35 +277,28 @@ def draw_bill_pdf(pdf_buffer, consignor, route, week_range, shipments, summary):
     from reportlab.pdfgen import canvas
     from reportlab.platypus import Table, TableStyle
     from reportlab.lib import colors
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-
-    # ===========================
-    #  Register Unicode Font (₹)
-    # ===========================
-    pdfmetrics.registerFont(TTFont('DejaVu', 'DejaVuSans.ttf'))
 
     c = canvas.Canvas(pdf_buffer, pagesize=A4)
     pw, ph = A4
     margin = 15 * mm
 
     # ============================================================
-    #                  CENTER HEADING (as per requirement)
+    #            SINGLE CENTER HEADING  (Your Required Style)
     # ============================================================
 
     heading_y = ph - 60
 
     # (ABC TRANSPORT)
-    c.setFont("DejaVu", 14)
+    c.setFont("Helvetica-Bold", 14)
     c.drawCentredString(pw/2, heading_y, f"({consignor})")
 
     # DELHI TO MUMBAI
-    c.setFont("DejaVu", 16)
+    c.setFont("Helvetica-Bold", 16)
     route_heading = route.replace(" → ", " TO ")
     c.drawCentredString(pw/2, heading_y - 22, route_heading.upper())
 
     # DATE : 20 NOV - 26 NOV 2025
-    c.setFont("DejaVu", 12)
+    c.setFont("Helvetica-Bold", 12)
     c.drawCentredString(pw/2, heading_y - 42, f"DATE : {week_range}")
 
     # ============================================================
@@ -314,6 +307,7 @@ def draw_bill_pdf(pdf_buffer, consignor, route, week_range, shipments, summary):
 
     table_start_y = ph - 120
 
+    # REMOVED CONSIGNEE COLUMN
     table_data = [
         ["SR NO", "DATE", "WT (KG)", "FREIGHT (₹/KG)", "PKGS", "AMOUNT (₹)"]
     ]
@@ -331,7 +325,7 @@ def draw_bill_pdf(pdf_buffer, consignor, route, week_range, shipments, summary):
             str(int(ship["wt"])),
             f"{freight_per_kg:.2f}",
             str(int(ship["pkgs"])),
-            f"₹{round(ship['amount'], 2)}"
+            f"{round(ship['amount'], 2)}"
         ])
 
         total_amount += ship["amount"]
@@ -339,55 +333,51 @@ def draw_bill_pdf(pdf_buffer, consignor, route, week_range, shipments, summary):
 
     # SUBTOTAL
     table_data.append([
-        "", "SUBTOTAL", str(int(total_wt)), "", "", f"₹{round(total_amount, 2)}"
+        "", "SUBTOTAL", str(int(total_wt)), "", "", f"{round(total_amount, 2)}"
     ])
 
     # OLD BALANCE
     table_data.append([
-        "", "OLD BALANCE", "", "", "", 
-        f"₹{round(summary.get('previous_balance', 0), 2)}"
+        "", "OLD BALANCE", "", "", "", f"{round(summary.get('previous_balance', 0), 2)}"
     ])
 
     # FINAL TOTAL
     final_total = total_amount + summary.get("previous_balance", 0)
     table_data.append([
-        "", "FINAL TOTAL", str(int(total_wt)), "", "", 
-        f"₹{round(final_total, 2)}"
+        "", "FINAL TOTAL", str(int(total_wt)), "", "", f"{round(final_total, 2)}"
     ])
 
-    # Column widths (balanced)
+    # Updated column widths (since consignee removed)
     col_widths = [60, 90, 80, 100, 60, 90]
 
     table = Table(table_data, colWidths=col_widths)
 
     # ----------------- TABLE STYLE -----------------
     table.setStyle(TableStyle([
-        # Use DejaVu everywhere (supports ₹)
-        ('FONTNAME', (0,0), (-1,-1), 'DejaVu'),
-
         # Header
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#003366')),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-        ('FONTNAME', (0,0), (-1,0), 'DejaVu'),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
         ('FONTSIZE', (0,0), (-1,0), 10),
         ('ALIGN', (0,0), (-1,0), 'CENTER'),
 
-        # Body rows
+        # Body
         ('BACKGROUND', (0,1), (-1,-4), colors.HexColor('#F7FBFF')),
+        ('FONTNAME', (0,1), (-1,-4), 'Helvetica'),
         ('FONTSIZE', (0,1), (-1,-4), 9),
 
-        # SUBTOTAL
+        # Subtotal
         ('BACKGROUND', (0,-3), (-1,-3), colors.HexColor('#DDEBF7')),
-        ('FONTNAME', (0,-3), (-1,-3), 'DejaVu-Bold'),
+        ('FONTNAME', (0,-3), (-1,-3), 'Helvetica-Bold'),
 
-        # OLD BALANCE
+        # Old Balance
         ('BACKGROUND', (0,-2), (-1,-2), colors.HexColor('#E7E6E6')),
-        ('FONTNAME', (0,-2), (-1,-2), 'DejaVu-Bold'),
+        ('FONTNAME', (0,-2), (-1,-2), 'Helvetica-Bold'),
 
-        # FINAL TOTAL
+        # Final Total
         ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#003366')),
         ('TEXTCOLOR', (0,-1), (-1,-1), colors.white),
-        ('FONTNAME', (0,-1), (-1,-1), 'DejaVu-Bold'),
+        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
         ('FONTSIZE', (0,-1), (-1,-1), 11),
 
         # Alignment
@@ -397,7 +387,7 @@ def draw_bill_pdf(pdf_buffer, consignor, route, week_range, shipments, summary):
         ('ALIGN', (5,1), (5,-1), 'RIGHT'),
 
         # Borders
-        ('GRID', (0,0), (-1,-1), 0.7, colors.black),
+        ('GRID', (0,0), (-1,-1), 0.8, colors.black),
     ]))
 
     # Draw table
