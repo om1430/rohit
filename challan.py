@@ -198,7 +198,7 @@ def draw_pdf(pdf_buffer, meta, rows):
 
     c.showPage()
     c.save()
-
+"""
 def draw_summary_pdf(pdf_buffer, route_from, route_to, month_year, summary_rows):
     c = canvas.Canvas(pdf_buffer, pagesize=A4)
     pw, ph = A4
@@ -240,6 +240,76 @@ def draw_summary_pdf(pdf_buffer, route_from, route_to, month_year, summary_rows)
                 str(int(totals["hamali"])), str(round(totals["balance"], 1))
             ])
         col_widths = [55, 60, 50, 40, 50, 55, 50, 50, 70]
+        table = Table(table_data, colWidths=col_widths)
+        style = [
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#FFF2CC')),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('LINEBELOW', (0, 0), (-1, 0), 2, colors.black)
+        ]
+        if page_num == num_pages - 1:
+            style.extend([
+                ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#FFD966')),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, -1), (-1, -1), 10),
+                ('LINEABOVE', (0, -1), (-1, -1), 2, colors.black)
+            ])
+        table.setStyle(TableStyle(style))
+        w, h = table.wrap(0, 0)
+        table.drawOn(c, margin, table_start_y - h)
+        c.showPage()
+    c.save()
+"""
+
+def draw_summary_pdf(pdf_buffer, route_from, route_to, month_year, summary_rows):
+    c = canvas.Canvas(pdf_buffer, pagesize=A4)
+    pw, ph = A4
+    margin = 15 * mm
+
+    totals = {"qty": 0, "weight": 0, "topay": 0, "hire": 0, "hamali": 0, "balance": 0}
+    for row in summary_rows:
+        for key in totals:
+            totals[key] += float(row[key]) if row[key] else 0
+
+    available_height = ph - 120
+    row_height = 20
+    rows_per_page = int(available_height / row_height) - 1
+    total_data_rows = len(summary_rows)
+    num_pages = (total_data_rows + rows_per_page - 1) // rows_per_page
+
+    for page_num in range(num_pages):
+        c.setFont("Helvetica-Bold", 18)
+        title = f"{route_from} TO {route_to} - {month_year}"
+        title_width = c.stringWidth(title, "Helvetica-Bold", 18)
+        c.drawString((pw - title_width) / 2, ph - 40, title)
+        if num_pages > 1:
+            c.setFont("Helvetica", 10)
+            page_text = f"Page {page_num + 1} of {num_pages}"
+            c.drawString(pw - margin - 80, ph - 40, page_text)
+
+        table_start_y = ph - 80
+        table_data = [["Sr.\nNo.", "Date", "Truck No.", "Chal- No.", "QTY", "Weight", "Topay", "Hire", "Hamali", "Balance - AMT"]]
+        start_idx, end_idx = page_num * rows_per_page, min((page_num + 1) * rows_per_page, total_data_rows)
+        for i, row in enumerate(summary_rows[start_idx:end_idx], start=start_idx + 1):
+            table_data.append([
+                str(i), row["date"], row["truck_no"], row["challan_no"], row["qty"],
+                row["weight"], row["topay"], row["hire"], row["hamali"], row["balance"]
+            ])
+        if page_num == num_pages - 1:
+            table_data.append([
+                "TOTAL", "", "", "", str(int(totals["qty"])), str(int(totals["weight"])),
+                str(round(totals["topay"], 1)), str(int(totals["hire"])),
+                str(int(totals["hamali"])), str(round(totals["balance"], 1))
+            ])
+        col_widths = [30, 50, 55, 45, 35, 45, 50, 45, 45, 65]
         table = Table(table_data, colWidths=col_widths)
         style = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4472C4')),
